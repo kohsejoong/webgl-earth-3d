@@ -44,7 +44,8 @@ const FS = `
 precision mediump float;
 uniform sampler2D uDay, uNight, uTopo;
 uniform vec3 uLight;      // view space 태양 방향
-uniform float uAmbient;
+uniform vec3 uLightAmbient, uLightDiffuse, uLightSpecular;  // 광원 속성
+uniform float uShininess;                                    // 물질 반짝임 계수
 uniform int uMode;        // 0: 위성 영상, 1: 고도 색상
 uniform bool uNightOn;
 varying vec3 vN, vS, vP;
@@ -60,14 +61,21 @@ vec3 hypso(float h) {
 void main() {
   float h = texture2D(uTopo, vUV).r;
   vec3 base = uMode == 0 ? texture2D(uDay, vUV).rgb : hypso(h);
-  vec3 N = normalize(vN), L = normalize(uLight), V = normalize(-vP);
+  vec3 N = normalize(vN), L = normalize(uLight), E = normalize(-vP);
+  vec3 H = normalize(L + E);                                   // 중간 벡터 (수정 Phong)
 
-  float diff = max(dot(N, L), 0.0);
-  float day  = smoothstep(-0.1, 0.15, dot(normalize(vS), L));  // 부드러운 터미네이터
-  float ocean = 1.0 - step(0.01, h);
-  float spec = ocean * day * pow(max(dot(reflect(-L, N), V), 0.0), 40.0) * 0.6;
+  // 물질: ka = kd = 지표 색상, ks = 바다에서만 0.6
+  vec3 ks = vec3(0.6 * (1.0 - step(0.01, h)));
+  float day = smoothstep(-0.1, 0.15, dot(normalize(vS), L));   // 부드러운 터미네이터
 
-  vec3 color = base * (uAmbient + (1.0 - uAmbient) * diff * day) + vec3(spec);
+  vec3 ambient = uLightAmbient * base;
+  float Kd = max(dot(L, N), 0.0);
+  vec3 diffuse = Kd * uLightDiffuse * base;
+  float Ks = pow(max(dot(N, H), 0.0), uShininess);
+  if (dot(L, N) < 0.0) Ks = 0.0;
+  vec3 specular = Ks * uLightSpecular * ks;
+
+  vec3 color = ambient + (diffuse + specular) * day;
   if (uNightOn) color += texture2D(uNight, vUV).rgb * (1.0 - day) * 0.9;
   gl_FragColor = vec4(color, 1.0);
 }`;
@@ -92,8 +100,10 @@ gl.linkProgram(prog);
 if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
 gl.useProgram(prog);
 const loc = (n) => gl.getUniformLocation(prog, n);
-const U = { proj: loc("uProj"), mv: loc("uMV"), light: loc("uLight"), ambient: loc("uAmbient"),
+const U = { proj: loc("uProj"), mv: loc("uMV"), light: loc("uLight"), shininess: loc("uShininess"),
   mode: loc("uMode"), nightOn: loc("uNightOn") };
+gl.uniform3fv(loc("uLightDiffuse"), [1, 1, 1]);
+gl.uniform3fv(loc("uLightSpecular"), [1, 1, 1]);
 
 // ---------- 위/경도 격자 생성 ----------
 // 정점 (i: 경도 인덱스, j: 위도 인덱스). 경도 360° 지점은 텍스처 이음매를 위해 중복 정점.
@@ -216,7 +226,7 @@ for (const [k, v] of new URLSearchParams(location.search)) {
   const el = $(k);
   if (el) el.type === "checkbox" ? (el.checked = v === "1") : (el.value = v);
 }
-for (const id of ["spinSpeed", "sunAngle", "exag", "ambient", "spin"]) {
+for (const id of ["spinSpeed", "sunAngle", "exag", "ambient", "shininess", "spin"]) {
   const show = () => ($(id + "Value").textContent = $(id).value);
   $(id).addEventListener("input", show); show();
 }
@@ -265,7 +275,9 @@ function frame(now) {
   gl.uniformMatrix4fv(U.proj, false, proj);
   gl.uniformMatrix4fv(U.mv, false, mv);
   gl.uniform3fv(U.light, Lv);
-  gl.uniform1f(U.ambient, +$("ambient").value);
+  const amb = +$("ambient").value;
+  gl.uniform3fv(loc("uLightAmbient"), [amb, amb, amb]);
+  gl.uniform1f(U.shininess, +$("shininess").value);
   gl.uniform1i(U.mode, ready ? +$("mode").value : 1);   // 위성 텍스처 로딩 전에는 고도 색상
   gl.uniform1i(U.nightOn, ready && $("nightLights").checked);
   gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
