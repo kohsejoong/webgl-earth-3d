@@ -226,24 +226,23 @@ for (const [k, v] of new URLSearchParams(location.search)) {
   const el = $(k);
   if (el) el.type === "checkbox" ? (el.checked = v === "1") : (el.value = v);
 }
-for (const id of ["spinSpeed", "sunAngle", "exag", "ambient", "shininess", "spin"]) {
+for (const id of ["spinSpeed", "sunAngle", "exag", "ambient", "shininess", "spin", "dist"]) {
   const show = () => ($(id + "Value").textContent = $(id).value);
   $(id).addEventListener("input", show); show();
 }
 $("exag").addEventListener("input", buildTerrain);
 if ($("exag").value !== "30") buildTerrain();
 
-// 마우스 드래그: 카메라 회전, 휠: 줌
-let yaw = 0, pitch = 0.3, dist = 3.2, drag = null;
-canvas.addEventListener("pointerdown", (e) => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener("pointerup", () => (drag = null));
-canvas.addEventListener("pointermove", (e) => {
+// 마우스 드래그: 카메라 회전 (mousedown -> mousemove -> mouseup)
+let yaw = 0, pitch = 0.3, drag = null;
+canvas.addEventListener("mousedown", function (event) { drag = [event.clientX, event.clientY]; });
+window.addEventListener("mouseup", function () { drag = null; });  // 캔버스 밖에서 버튼을 놓아도 드래그 종료
+canvas.addEventListener("mousemove", function (event) {
   if (!drag) return;
-  yaw += (e.clientX - drag[0]) * 0.01;
-  pitch = Math.max(-1.5, Math.min(1.5, pitch + (e.clientY - drag[1]) * 0.01));
-  drag = [e.clientX, e.clientY];
+  yaw += (event.clientX - drag[0]) * 0.01;
+  pitch = Math.max(-1.5, Math.min(1.5, pitch + (event.clientY - drag[1]) * 0.01));
+  drag = [event.clientX, event.clientY];
 });
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); dist = Math.max(1.5, Math.min(8, dist * (1 + e.deltaY * 0.001))); }, { passive: false });
 
 // ---------- 렌더 루프 ----------
 gl.enable(gl.DEPTH_TEST);
@@ -260,7 +259,7 @@ function frame(now) {
   }
 
   const proj = mat4.perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100);
-  const view = mat4.mul(mat4.translate(0, 0, -dist), mat4.mul(mat4.rotX(pitch), mat4.rotY(yaw)));
+  const view = mat4.mul(mat4.translate(0, 0, -$("dist").value), mat4.mul(mat4.rotX(pitch), mat4.rotY(yaw)));
   // 모델: 자전축 23.44° 기울임 * 자전(y축)
   const model = mat4.mul(mat4.rotZ(AXIAL_TILT), mat4.rotY(spinAngle + +$("spin").value * Math.PI / 180));
   const mv = mat4.mul(view, model);

@@ -10,7 +10,7 @@
 python -m http.server 8000
 ```
 
-이후 `http://localhost:8000` 접속. 드래그로 회전, 휠로 확대/축소.
+이후 `http://localhost:8000` 접속. 마우스 드래그로 시점 회전, 슬라이더로 카메라 거리 조절.
 
 ## 기능
 
